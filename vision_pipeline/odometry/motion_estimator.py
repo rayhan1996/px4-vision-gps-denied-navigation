@@ -1,3 +1,4 @@
+
 import cv2
 import numpy as np
 
@@ -10,3 +11,10 @@ def estimate_motion(kp1, kp2, matches, K):
     _, R, t, _ = cv2.recoverPose(E, pts1, pts2, K)
 
     return R, t
+
+from scipy.spatial.transform import Rotation as R_scipy
+
+def rotation_to_quaternion(R):
+    r = R_scipy.from_matrix(R)
+    q = r.as_quat()  # [qx, qy, qz, qw]
+    return q
