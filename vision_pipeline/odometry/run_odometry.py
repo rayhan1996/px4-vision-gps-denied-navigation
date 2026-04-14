@@ -1,14 +1,15 @@
 """
-Visual Odometry Runner (EuRoC MAV Dataset)
+Monocular Visual Odometry with Trajectory (EuRoC)
 
-This script runs a monocular visual odometry pipeline using sequential images.
-It performs:
+This script runs a full visual odometry pipeline:
 - Feature extraction (ORB)
 - Feature matching
-- Relative motion estimation (R, t)
-- Logging trajectory results
+- Motion estimation (R, t)
+- Trajectory accumulation
 
-Designed to work with EuRoC MAV dataset (cam0 images).
+Outputs:
+- Logged poses
+- Saved trajectory (trajectory.npy)
 """
 
 import cv2
@@ -16,38 +17,41 @@ import glob
 import numpy as np
 import time
 import os
+import sys
 
+# ===============================
+# Fix import path (for config)
+# ===============================
+sys.path.append(os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "../../")
+))
+
+# ===============================
+# Project imports
+# ===============================
 from feature_extractor import extract_features
 from feature_matcher import match_features
 from motion_estimator import estimate_motion, rotation_to_quaternion
 from logger import ExperimentLogger
+from trajectory import TrajectoryBuilder
+from config import CAM0_PATH, K_EUROC
 
 # ===============================
-# Init Logger
+# Init Logger & Trajectory
 # ===============================
-logger = ExperimentLogger(experiment_name="orb_vo_euroc")
+logger = ExperimentLogger(experiment_name="mono_vo_euroc")
+trajectory = TrajectoryBuilder()
 
 # ===============================
-# EuRoC Camera Intrinsics (cam0)
+# Camera Intrinsics
 # ===============================
-K = np.array([
-    [458.654, 0, 367.215],
-    [0, 457.296, 248.375],
-    [0, 0, 1]
-])
-
-# ===============================
-# Dataset Path (CHANGE IF NEEDED)
-# ===============================
-DATASET_PATH = "/content/drive/MyDrive/EuRoC/MH_01_easy/mav0/cam0/data"
+K = np.array(K_EUROC, dtype=np.float64)
 
 # ===============================
 # Load images
 # ===============================
-image_paths = sorted(glob.glob(os.path.join(DATASET_PATH, "*.png")))
-
-if len(image_paths) < 2:
-    raise RuntimeError("❌ Not enough images for odometry")
+image_paths = sorted(glob.glob(os.path.join(CAM0_PATH, "*.png")))
+assert len(image_paths) > 1, "Not enough images"
 
 print(f"✅ Loaded {len(image_paths)} images")
 
@@ -63,52 +67,16 @@ prev_kp, prev_desc = extract_features(prev_img)
 for path in image_paths[1:]:
 
     curr_img = cv2.imread(path, 0)
-
-    # Extract features
     kp, desc = extract_features(curr_img)
 
-    # Skip if descriptors are invalid
     if desc is None or prev_desc is None:
-        print("⚠️ Skipping frame due to missing descriptors")
         prev_kp, prev_desc = kp, desc
         continue
 
-    # Match features
     matches = match_features(prev_desc, desc)
 
     if len(matches) < 8:
-        print("⚠️ Not enough matches")
         prev_kp, prev_desc = kp, desc
         continue
 
-    # Estimate motion
-    R, t = estimate_motion(prev_kp, kp, matches, K)
-
-    # Print debug
-    print("Translation:", t.ravel())
-    print("Rotation:\n", R)
-
     # ===============================
-    # Use real timestamp from filename
-    # ===============================
-    try:
-        timestamp = float(os.path.basename(path).replace(".png", "")) / 1e9
-    except:
-        timestamp = time.time()
-
-    # Convert outputs
-    t_vec = t.ravel()
-    q = rotation_to_quaternion(R)
-
-    # Log result
-    logger.log(timestamp, t_vec, q)
-
-    # Update previous frame
-    prev_kp, prev_desc = kp, desc
-
-# ===============================
-# Cleanup
-# ===============================
-logger.close()
-
-print("✅ Visual odometry finished.")
