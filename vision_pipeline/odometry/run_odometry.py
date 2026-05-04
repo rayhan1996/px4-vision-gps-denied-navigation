@@ -62,10 +62,31 @@ imu_path = os.path.join(os.path.dirname(CAM0_PATH), "imu0", "data.csv")
 imu_timestamps, gyro, accel = load_imu_data(imu_path)
 
 # ===============================
-# ⚠️ FAKE timestamps (temporary)
+# ⚠️ real timestamps 
 # ===============================
-# Later we replace with real EuRoC timestamps
-image_timestamps = np.linspace(0, len(image_paths) * 0.05, len(image_paths))
+
+def load_image_timestamps(cam0_csv_path):
+    """
+    Load EuRoC camera timestamps.
+
+    Returns:
+        dict: {filename: timestamp_in_seconds}
+    """
+    import csv
+
+    timestamps = {}
+
+    with open(cam0_csv_path, 'r') as f:
+        reader = csv.reader(f)
+        next(reader)  # skip header
+
+        for row in reader:
+            ts_ns = int(row[0])
+            filename = row[1]
+
+            timestamps[filename] = ts_ns * 1e-9  # ns → seconds
+
+    return timestamps
 
 # ===============================
 # IMU State Initialization
