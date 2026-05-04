@@ -13,6 +13,7 @@ import glob
 import numpy as np
 import os
 import sys
+import csv
 
 # ===============================
 # Fix import path
@@ -31,10 +32,8 @@ from logger import ExperimentLogger
 from trajectory import TrajectoryBuilder
 from config import CAM0_PATH, K_EUROC
 
-# ✅ IMU imports
 from vision_pipeline.imu.imu_loader import load_imu_data, get_imu_segment
 from vision_pipeline.imu.imu_integrator import integrate_imu
-
 
 # ===============================
 # Init Logger & Trajectory
@@ -62,18 +61,9 @@ imu_path = os.path.join(os.path.dirname(CAM0_PATH), "imu0", "data.csv")
 imu_timestamps, gyro, accel = load_imu_data(imu_path)
 
 # ===============================
-# ⚠️ real timestamps 
+# 🔥 Load REAL camera timestamps
 # ===============================
-
 def load_image_timestamps(cam0_csv_path):
-    """
-    Load EuRoC camera timestamps.
-
-    Returns:
-        dict: {filename: timestamp_in_seconds}
-    """
-    import csv
-
     timestamps = {}
 
     with open(cam0_csv_path, 'r') as f:
@@ -83,10 +73,28 @@ def load_image_timestamps(cam0_csv_path):
         for row in reader:
             ts_ns = int(row[0])
             filename = row[1]
-
             timestamps[filename] = ts_ns * 1e-9  # ns → seconds
 
     return timestamps
+
+
+cam0_csv = os.path.join(CAM0_PATH, "..", "data.csv")
+image_timestamp_dict = load_image_timestamps(cam0_csv)
+
+# 🔥 IMPORTANT: build ordered timestamp list
+image_timestamps = []
+
+for path in image_paths:
+    filename = os.path.basename(path)
+
+    if filename not in image_timestamp_dict:
+        raise ValueError(f"Timestamp not found for {filename}")
+
+    image_timestamps.append(image_timestamp_dict[filename])
+
+image_timestamps = np.array(image_timestamps)
+
+print("✅ Real timestamps loaded")
 
 # ===============================
 # IMU State Initialization
@@ -143,7 +151,6 @@ for i, path in enumerate(image_paths[1:], start=1):
     # ---------------------------
     # SIMPLE FUSION (TEMP)
     # ---------------------------
-    # Use VO for direction, IMU helps stability
     R_imu = R_vo
     p = p + R_imu @ t_vo.flatten()
 
