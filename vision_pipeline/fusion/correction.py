@@ -1,6 +1,6 @@
 import numpy as np
 
-from vision_pipeline.motion_estimator import (
+from vision_pipeline.odometry.motion_estimator import (
     rotation_to_quaternion
 )
 
