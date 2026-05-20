@@ -22,3 +22,10 @@ Python/C++ module for frame capture & motion estimation
 CSV logs of synchronized sensor data and frame timestamps
 Visualizations of estimated trajectory
 Ready for integration with PX4 SITL or real hardware
+
+## Setup
+
+### Create environment
+
+```bash
+python -m venv venv
