@@ -5,10 +5,6 @@ from vision_pipeline.fusion.fusion_manager import (
     FusionManager
 )
 
-from vision_pipeline.fusion.state import (
-    NavigationState
-)
-
 
 def generate_fake_imu(n_samples=50):
     """
@@ -30,43 +26,46 @@ def generate_fake_imu(n_samples=50):
     # Small forward acceleration
     accel[:, 0] = 0.1
 
-    # Gravity-compensated body accel
-    accel[:, 2] = 9.81
+    # Body-frame accel (no fake gravity)
+    accel[:, 2] = 0.0
 
     return timestamps, gyro, accel
 
 
-def generate_fake_vo():
+def generate_fake_vo(frame_id):
     """
-    Fake visual odometry delta.
+    Fake visual odometry trajectory.
     """
 
     position = np.array([
-        0.05,
+        0.05 * frame_id,
         0.0,
         0.0
     ])
 
-    rotation = np.eye(3)
+    yaw = 0.01 * frame_id
+
+    c = np.cos(yaw)
+    s = np.sin(yaw)
+
+    rotation = np.array([
+        [c, -s, 0],
+        [s,  c, 0],
+        [0,  0, 1]
+    ])
 
     return position, rotation
 
 
-def generate_fake_altitude():
+def generate_fake_altitude(frame_id):
     """
-    Fake altitude estimate.
+    Fake altitude profile.
     """
 
-    return 120.0
+    return 120.0 + 0.1 * frame_id
 
 
-def print_state(
-    frame_id,
-    state
-):
-    """
-    Pretty print navigation state.
-    """
+def print_state(frame_id, state):
 
     print("=" * 60)
     print(f"Frame {frame_id}")
@@ -90,6 +89,17 @@ def print_state(
     print("=" * 60)
 
 
+def check_rotation_matrix(R):
+
+    should_be_I = R.T @ R
+
+    return np.allclose(
+        should_be_I,
+        np.eye(3),
+        atol=1e-3
+    )
+
+
 def main():
 
     fusion = FusionManager()
@@ -100,19 +110,16 @@ def main():
 
     for frame_id in range(n_frames):
 
-        # ---------------------------------
-        # Fake sensor data
-        # ---------------------------------
         imu_t, gyro, accel = (
             generate_fake_imu()
         )
 
         vo_position, vo_rotation = (
-            generate_fake_vo()
+            generate_fake_vo(frame_id)
         )
 
         altitude = (
-            generate_fake_altitude()
+            generate_fake_altitude(frame_id)
         )
 
         airspeed = 15.0
@@ -123,18 +130,14 @@ def main():
             0.0
         ])
 
-        # ---------------------------------
         # Prediction
-        # ---------------------------------
         fusion.predict_from_imu(
             imu_t,
             gyro,
             accel
         )
 
-        # ---------------------------------
-        # Corrections
-        # ---------------------------------
+        # Correction
         fusion.correct_with_vo(
             vo_position,
             vo_rotation
@@ -149,30 +152,26 @@ def main():
             wind_vector
         )
 
-        # ---------------------------------
-        # Read state
-        # ---------------------------------
         state = fusion.get_state()
 
-        print_state(
-            frame_id,
-            state
-        )
+        print_state(frame_id, state)
 
-        # ---------------------------------
-        # Sanity checks
-        # ---------------------------------
-        assert not np.any(
-            np.isnan(state.position)
-        ), "NaN in position"
+        # Better sanity checks
+        assert np.all(
+            np.isfinite(state.position)
+        ), "Invalid position"
 
-        assert not np.any(
-            np.isnan(state.velocity)
-        ), "NaN in velocity"
+        assert np.all(
+            np.isfinite(state.velocity)
+        ), "Invalid velocity"
 
-        assert not np.isnan(
+        assert np.isfinite(
             state.altitude
-        ), "NaN in altitude"
+        ), "Invalid altitude"
+
+        assert check_rotation_matrix(
+            state.rotation
+        ), "Invalid rotation matrix"
 
         time.sleep(0.1)
 
