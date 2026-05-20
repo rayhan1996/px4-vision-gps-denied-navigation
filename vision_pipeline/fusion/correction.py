@@ -1,40 +1,84 @@
 import numpy as np
 
-from vision_pipeline.odometry.motion_estimator import (
-    rotation_to_quaternion
-)
+
+def rotation_to_quaternion(R):
+    """
+    Convert rotation matrix to quaternion.
+    Returns [x, y, z, w]
+    """
+
+    q = np.zeros(4)
+
+    trace = np.trace(R)
+
+    if trace > 0:
+        s = 0.5 / np.sqrt(trace + 1.0)
+
+        q[3] = 0.25 / s
+        q[0] = (R[2, 1] - R[1, 2]) * s
+        q[1] = (R[0, 2] - R[2, 0]) * s
+        q[2] = (R[1, 0] - R[0, 1]) * s
+
+    else:
+        if R[0, 0] > R[1, 1] and R[0, 0] > R[2, 2]:
+            s = 2.0 * np.sqrt(
+                1.0 + R[0, 0] - R[1, 1] - R[2, 2]
+            )
+
+            q[3] = (R[2, 1] - R[1, 2]) / s
+            q[0] = 0.25 * s
+            q[1] = (R[0, 1] + R[1, 0]) / s
+            q[2] = (R[0, 2] + R[2, 0]) / s
+
+        elif R[1, 1] > R[2, 2]:
+            s = 2.0 * np.sqrt(
+                1.0 + R[1, 1] - R[0, 0] - R[2, 2]
+            )
+
+            q[3] = (R[0, 2] - R[2, 0]) / s
+            q[0] = (R[0, 1] + R[1, 0]) / s
+            q[1] = 0.25 * s
+            q[2] = (R[1, 2] + R[2, 1]) / s
+
+        else:
+            s = 2.0 * np.sqrt(
+                1.0 + R[2, 2] - R[0, 0] - R[1, 1]
+            )
+
+            q[3] = (R[1, 0] - R[0, 1]) / s
+            q[0] = (R[0, 2] + R[2, 0]) / s
+            q[1] = (R[1, 2] + R[2, 1]) / s
+            q[2] = 0.25 * s
+
+    return q
 
 
 class StateCorrector:
     """
-    Correction step using:
-    - visual odometry
-    - altitude
-    - airspeed
+    Correction step for fusion.
     """
 
     def correct_vo(
         self,
         state,
-        R_vo,
-        t_vo
+        position_vo,
+        rotation_vo
     ):
         """
         Correct pose using visual odometry.
         """
 
-        # Orientation correction
-        state.rotation = R_vo
+        # Replace orientation
+        state.rotation = rotation_vo
 
-        # Position correction
-        state.position = (
-            state.position
-            + state.rotation @ t_vo.flatten()
-        )
+        # Replace position with VO estimate
+        state.position = position_vo
 
-        # Quaternion update
-        state.quaternion = rotation_to_quaternion(
-            state.rotation
+        # Update quaternion
+        state.quaternion = (
+            rotation_to_quaternion(
+                state.rotation
+            )
         )
 
         return state
@@ -44,8 +88,13 @@ class StateCorrector:
         state,
         altitude
     ):
+        """
+        Correct altitude estimate.
+        """
 
-        state.altitude = altitude
+        state.altitude = float(
+            altitude
+        )
 
         return state
 
@@ -54,17 +103,28 @@ class StateCorrector:
         state,
         airspeed
     ):
+        """
+        Correct airspeed estimate.
+        """
 
-        state.airspeed = airspeed
+        state.airspeed = float(
+            airspeed
+        )
 
         return state
 
     def correct_wind(
         self,
         state,
-        wind
+        wind_vector
     ):
+        """
+        Correct wind estimate.
+        """
 
-        state.wind = wind
+        state.wind_vector = np.array(
+            wind_vector,
+            dtype=float
+        )
 
         return state
